@@ -1,6 +1,3 @@
-from asyncio import events
-from email import message
-
 from time import sleep
 import discord
 import os
