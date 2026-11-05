@@ -26,7 +26,7 @@ async def on_message(msg):
 
     if msg.channel.id == canal_sugestao:
         mensagem = str(msg.content)
-        if not '!sugerir' in mensagem:
+        if not '!sugerir_privado' in mensagem or not '!sugerir_limparc':
             mensagem_bot = 'Use o prefixo (!sugerir) para requisitar uma sugestão, em caso de duvidas consulte as instruções!'
             await msg.channel.send(mensagem_bot)
             await msg.delete()
