@@ -99,7 +99,6 @@ async def disparar_embed(ctx, sugestao, anonimo):
     embed_sugestao.set_author(name = 'Suggestion Bot', icon_url = 'https://github.com/dablio-dev/Bot-Estude-a'
                                                                   '-Mudan-a-para-discord/blob/main/Perfil_Suggestion_Bot'
                                                                   '.jpg?raw=true', url = 'https://github.com/dablio-dev')
-    canal_destino = bot.get_channel(int(canal_sugestao))
     if anonimo:
         await ctx.send(embed = embed_sugestao)
     mensagem_publicada = await canal_destino.send(embed = embed_sugestao)
