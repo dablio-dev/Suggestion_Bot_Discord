@@ -1,21 +1,32 @@
 import asyncio
 import discord
+import json
 import os
 from dotenv import load_dotenv
-from discord.ext import commands, tasks
+from discord.ext import commands
 load_dotenv()
 token = os.getenv('token_discord')
 canal_sugestao = int(os.getenv('canal_sugestao'))
 sessoes_pendentes = {}
 votacoes = {}
-votantes = set()
-
 
 intents = discord.Intents.all()
 bot = commands.Bot('!s', intents = intents)
 
 @bot.event
 async def on_ready():
+    botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
+                                      custom_id='botao_sim')
+    botao_reprovar = discord.ui.Button(label='Reprovar', style=discord.ButtonStyle.red, emoji='✖️',
+                                       custom_id='botao_nao')
+
+    botao_aprovar.callback = cb_botao
+    botao_reprovar.callback = cb_botao
+    view = discord.ui.View(timeout=None)
+    view.add_item(botao_aprovar)
+    view.add_item(botao_reprovar)
+
+    bot.add_view(view)
     print('Bot carregado com sucesso!')
 
 @bot.event
@@ -31,8 +42,7 @@ async def on_message(msg):
     if msg.channel.id == canal_sugestao:
 
         mensagem = str(msg.content)
-        #if mensagem[0:2] != '!s' testar este if para garantir que o prefixo esta na posição certa
-        if not '!s' in mensagem:
+        if mensagem[0:2] != '!s':
             mensagem_bot = 'Use o prefixo (!s) para requisitar uma sugestão, em caso de duvidas consulte as instruções!'
             await msg.channel.send(mensagem_bot)
             await msg.delete()
@@ -44,8 +54,8 @@ async def on_message(msg):
 async def cb_botao(interacao:discord.Interaction):
     user_id = interacao.user.id
     msg_id = interacao.message.id
-    '''if msg_id not in votacoes:
-        votacoes[msg_id] = {'sim': 0, 'nao': 0, 'votantes': {'id_sim': set(), 'id_nao': set()}}'''
+    if msg_id not in votacoes:
+        votacoes[msg_id] = {'votantes': {'id_sim': set(), 'id_nao': set()}}
 
     botao_clicado = interacao.data['custom_id']
 
@@ -70,19 +80,20 @@ async def cb_botao(interacao:discord.Interaction):
 
         if user_id in votacoes[msg_id]['votantes']['id_sim']:
             votacoes[msg_id]['votantes']['id_sim'].discard(user_id)
-            print('voto trocado')
         if not voto_removido:
             votacoes[msg_id]['votantes']['id_nao'].add(user_id)
 
-    total = len(votacoes[msg_id]['votantes']['id_sim']) + len(votacoes[msg_id]['votantes']['id_nao'])
+    contagem_sim = len(votacoes[msg_id]['votantes']['id_sim'])
+    contagem_nao = len(votacoes[msg_id]['votantes']['id_nao'])
+    total = contagem_sim + contagem_nao
     if total > 0:
-        pct_sim = (len(votacoes[msg_id]['votantes']['id_sim']) / total) * 100
-        pct_nao = (len(votacoes[msg_id]['votantes']['id_nao']) / total) * 100
+        pct_sim = (contagem_sim / total) * 100
+        pct_nao = (contagem_nao / total) * 100
     else:
         pct_sim = 0
         pct_nao = 0
 
-    botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✔️',
+    botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
                                       custom_id='botao_sim')
     botao_reprovar = discord.ui.Button(label='Reprovar', style=discord.ButtonStyle.red, emoji='✖️',
                                        custom_id='botao_nao')
@@ -94,8 +105,8 @@ async def cb_botao(interacao:discord.Interaction):
     view.add_item(botao_aprovar)
     view.add_item(botao_reprovar)
 
-    botao_aprovar.label = f'Aprovar ({len(votacoes[msg_id]['votantes']['id_sim'])}) | {pct_sim:.1f}%'
-    botao_reprovar.label = f'Reprovar ({len(votacoes[msg_id]['votantes']['id_nao'])}) | {pct_nao:.1f}%'
+    botao_aprovar.label = f'Aprovar ({contagem_sim}) | {pct_sim:.1f}%'
+    botao_reprovar.label = f'Reprovar ({contagem_nao}) | {pct_nao:.1f}%'
 
     await interacao.response.edit_message(view=view)
 
@@ -110,7 +121,6 @@ async def _privado(ctx:commands.Context):
     await ctx.author.send('**Insira o comando !s_particular e logo em seguida a sua sugestão.**\n'
                           '\nVocê terá 5 minutos para fazer sua sugestão antes que esta sessão seja fechada,'
                           ' se caso a sessão feche antes que você consiga enviar sua sugestão é só abrir outra')
-    print(sessoes_pendentes[ctx.author.id]['canal_id'])
     asyncio.create_task(expirar_sessao(usuario_id = ctx.author.id))
 
 async def expirar_sessao(usuario_id):
@@ -175,7 +185,7 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
 
 
 
-    botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✔️',
+    botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
                                       custom_id='botao_sim')
     botao_reprovar = discord.ui.Button(label='Reprovar', style=discord.ButtonStyle.red, emoji='✖️',
                                        custom_id='botao_nao')
@@ -188,7 +198,7 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
 
     mensagem_publicada = await canal_destino.send(embed = embed_sugestao, view=view)
     msg_id = mensagem_publicada.id
-    votacoes[msg_id] = {'sim': 0, 'nao': 0, 'votantes': {'id_sim': set(), 'id_nao': set()}}
+    votacoes[msg_id] = {'votantes': {'id_sim': set(), 'id_nao': set()}}
 
 #comando para limpar o chat
 @bot.command()
