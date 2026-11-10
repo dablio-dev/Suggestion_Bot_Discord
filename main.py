@@ -52,39 +52,58 @@ async def on_message(msg):
     await bot.process_commands(msg)
 
 async def cb_botao(interacao:discord.Interaction):
-    user_id = interacao.user.id
-    msg_id = interacao.message.id
-    if msg_id not in votacoes:
-        votacoes[msg_id] = {'votantes': {'id_sim': set(), 'id_nao': set()}}
+    caminho = f'servidores/{interacao.guild.id}.json'
+    if not os.path.exists(caminho):
+        with open(caminho, 'w', encoding='utf-8') as f:
+            json.dump({}, f, indent=4)
+        dados = {}
+    else:
+        with open(caminho, 'r', encoding='utf-8') as f:
+            dados = json.load(f)
+    user_id = str(interacao.user.id)
+    msg_id = str(interacao.message.id)
+    serv_id = str(interacao.guild.id)
+    if msg_id not in dados:
+        dados[msg_id] = {'votantes': {'id_sim': list(), 'id_nao': list()}}
 
     botao_clicado = interacao.data['custom_id']
+
+    id_sim = set(dados[msg_id]['votantes']['id_sim'])
+    id_nao = set(dados[msg_id]['votantes']['id_nao'])
 
     if botao_clicado == 'botao_sim':
         voto_removido = False
 
-        if user_id in votacoes[msg_id]['votantes']['id_sim']:
-            votacoes[msg_id]['votantes']['id_sim'].discard(user_id)
+        if user_id in id_sim:
+            id_sim.discard(user_id)
             voto_removido = True
 
-        if user_id in votacoes[msg_id]['votantes']['id_nao']:
-            votacoes[msg_id]['votantes']['id_nao'].discard(user_id)
+        if user_id in id_nao:
+            id_nao.discard(user_id)
 
         if not voto_removido:
-            votacoes[msg_id]['votantes']['id_sim'].add(user_id)
+            id_sim.add(user_id)
 
     elif botao_clicado == 'botao_nao':
         voto_removido = False
-        if user_id in votacoes[msg_id]['votantes']['id_nao']:
-            votacoes[msg_id]['votantes']['id_nao'].discard(user_id)
+        if user_id in id_nao:
+            id_nao.discard(user_id)
             voto_removido = True
 
-        if user_id in votacoes[msg_id]['votantes']['id_sim']:
-            votacoes[msg_id]['votantes']['id_sim'].discard(user_id)
-        if not voto_removido:
-            votacoes[msg_id]['votantes']['id_nao'].add(user_id)
+        if user_id in id_sim:
+            id_sim.discard(user_id)
 
-    contagem_sim = len(votacoes[msg_id]['votantes']['id_sim'])
-    contagem_nao = len(votacoes[msg_id]['votantes']['id_nao'])
+        if not voto_removido:
+            id_nao.add(user_id)
+
+    dados[msg_id]['votantes']['id_sim'] = list(id_sim)
+    dados[msg_id]['votantes']['id_nao'] = list(id_nao)
+
+    with open(caminho, 'w', encoding='utf-8', ) as f:
+        json.dump(dados, f, indent=4, ensure_ascii=False)
+
+    contagem_sim = len(id_sim)
+    contagem_nao = len(id_nao)
     total = contagem_sim + contagem_nao
     if total > 0:
         pct_sim = (contagem_sim / total) * 100
