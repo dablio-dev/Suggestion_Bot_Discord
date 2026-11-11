@@ -51,6 +51,22 @@ async def on_message(msg):
             await mensagem_ajuda(msg)
     await bot.process_commands(msg)
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def _escolher_canal(ctx:commands.Context):
+    caminho = f'servidores/{ctx.guild.id}.json'
+    os.makedirs('servidores', exist_ok=True)
+    if not os.path.exists(caminho):
+        with open(caminho, 'w', encoding='utf-8') as f:
+            json.dump({}, f, indent=4)
+        dados = {}
+    else:
+        with open(caminho, 'r', encoding='utf-8') as f:
+            dados = json.load(f)
+    dados['canal_operacao'] = ctx.channel.id
+    with open(caminho, 'w', encoding='utf-8') as f:
+        json.dump(dados, f, indent=4, ensure_ascii=False)
+
 async def cb_botao(interacao:discord.Interaction):
     caminho = f'servidores/{interacao.guild.id}.json'
     if not os.path.exists(caminho):
@@ -132,6 +148,12 @@ async def cb_botao(interacao:discord.Interaction):
 #comando para criar uma ordem de sugestão anonima no privado
 @bot.command()
 async def _privado(ctx:commands.Context):
+    canal_id = await procurar_canal(ctx=ctx)
+    if not canal_id:
+        return
+    if ctx.channel.id != canal_id:
+        return
+
     canal = ctx.channel.id
     if canal != canal_sugestao:
         return
@@ -149,8 +171,14 @@ async def expirar_sessao(usuario_id):
 #comando para fazer a sugestão anonima no privado
 @bot.command()
 async def _particular(ctx:commands.Context,* ,sugestao_user):
+    canal_id = await procurar_canal(ctx=ctx)
+    if not canal_id:
+        return
+    if ctx.channel.id != canal_id:
+        return
     if ctx.guild is not None:
         return
+
     if ctx.author.id not in sessoes_pendentes:
         await ctx.send('Nenhum chamado registrado ou chamado expirado, por favor vá no canal de sugestões'
                        ' do servidor que deseja e dispare o comando **!s_privado**!')
@@ -162,7 +190,10 @@ async def _particular(ctx:commands.Context,* ,sugestao_user):
 #comando para fazer uma sugestão com autor marcado na mensagem
 @bot.command()
 async def _sugerir(ctx:commands.Context,* ,sugestao_user):
-    if ctx.channel.id != canal_sugestao:
+    canal_id = await procurar_canal(ctx=ctx)
+    if not canal_id:
+        return
+    if ctx.channel.id != canal_id:
         return
     sugestao = str(sugestao_user).strip().capitalize()
     anonimo = False
@@ -170,17 +201,31 @@ async def _sugerir(ctx:commands.Context,* ,sugestao_user):
     await disparar_embed(sugestao = sugestao, ctx = ctx, anonimo = anonimo, usuario_id = None)
     await ctx.message.delete()
 
+async def procurar_canal(ctx):
+    caminho = f'servidores/{ctx.guild.id}.json'
+    if not os.path.exists(caminho):
+        await ctx.send('Ainda não foi configurado um canal de sugestão neste servidor')
+        return None
+    with open(caminho, 'r', encoding='utf-8') as f:
+        dados = json.load(f)
+    canal_id = dados.get('canal_operacao')
+    if not canal_id:
+        await ctx.send('Ainda não foi configurado um canal de sugestão neste servidor')
+        return None
+    return canal_id
+
 #função para disparar a embed
 async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
+    canal_id = await procurar_canal(ctx=ctx)
+    if not canal_id:
+        return
+    if ctx.channel.id != canal_id:
+        return
     embed_sugestao = discord.Embed()
-    canal_destino = bot.get_channel(canal_sugestao)
+    canal_destino = bot.get_channel(canal_id)
 
     #para sugestões anonimas
     if anonimo:
-        canal_destino = bot.get_channel(sessoes_pendentes[usuario_id]['canal_id'])
-        if not canal_destino:
-            await ctx.send('Canal o canal de sugestões não foi encontrado, por favor repita o processo!')
-            return
         sessoes_pendentes.pop(usuario_id, None)
         embed_sugestao.description = (f'__**UM USUÁRIO FEZ UMA SUGESTÃO!**__\n\n'
                                       f'**{sugestao}**')
@@ -202,8 +247,6 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
     if anonimo:
         await ctx.send(embed = embed_sugestao)
 
-
-
     botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
                                       custom_id='botao_sim')
     botao_reprovar = discord.ui.Button(label='Reprovar', style=discord.ButtonStyle.red, emoji='✖️',
@@ -216,8 +259,6 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
     view.add_item(botao_reprovar)
 
     mensagem_publicada = await canal_destino.send(embed = embed_sugestao, view=view)
-    msg_id = mensagem_publicada.id
-    votacoes[msg_id] = {'votantes': {'id_sim': set(), 'id_nao': set()}}
 
 #comando para limpar o chat
 @bot.command()
