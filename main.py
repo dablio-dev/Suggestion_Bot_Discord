@@ -7,7 +7,7 @@ from discord.ext import commands
 load_dotenv()
 token = os.getenv('token_discord')
 canal_sugestao = int(os.getenv('canal_sugestao'))
-sessoes_pendentes = {}
+sessoes_pendentes = {'chaves_sessoes': {}}
 votacoes = {}
 
 intents = discord.Intents.all()
@@ -47,8 +47,6 @@ async def on_message(msg):
             await msg.channel.send(mensagem_bot)
             await msg.delete()
             return
-        if mensagem == '!s':
-            await mensagem_ajuda(msg)
     await bot.process_commands(msg)
 
 @bot.command()
@@ -154,10 +152,9 @@ async def _privado(ctx:commands.Context):
     if ctx.channel.id != canal_id:
         return
 
-    canal = ctx.channel.id
-    if canal != canal_sugestao:
+    if canal_id != canal_sugestao:
         return
-    sessoes_pendentes[ctx.author.id] = {'canal_id': ctx.channel.id}
+    sessoes_pendentes['chaves_sessoes'][ctx.author.id] = ctx
     await ctx.message.delete()
     await ctx.author.send('**Insira o comando !s_particular e logo em seguida a sua sugestão.**\n'
                           '\nVocê terá 5 minutos para fazer sua sugestão antes que esta sessão seja fechada,'
@@ -166,20 +163,14 @@ async def _privado(ctx:commands.Context):
 
 async def expirar_sessao(usuario_id):
     await asyncio.sleep(300)
-    sessoes_pendentes.pop(usuario_id, None)
+    sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
 
 #comando para fazer a sugestão anonima no privado
 @bot.command()
 async def _particular(ctx:commands.Context,* ,sugestao_user):
-    canal_id = await procurar_canal(ctx=ctx)
-    if not canal_id:
+    if ctx.guild:
         return
-    if ctx.channel.id != canal_id:
-        return
-    if ctx.guild is not None:
-        return
-
-    if ctx.author.id not in sessoes_pendentes:
+    if ctx.author.id not in sessoes_pendentes['chaves_sessoes']:
         await ctx.send('Nenhum chamado registrado ou chamado expirado, por favor vá no canal de sugestões'
                        ' do servidor que deseja e dispare o comando **!s_privado**!')
         return
@@ -216,17 +207,18 @@ async def procurar_canal(ctx):
 
 #função para disparar a embed
 async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
-    canal_id = await procurar_canal(ctx=ctx)
+    if anonimo:
+        canal_id = await procurar_canal(ctx=sessoes_pendentes['chaves_sessoes'][ctx.author.id])
+    else:
+        canal_id = await procurar_canal(ctx=ctx)
     if not canal_id:
-        return
-    if ctx.channel.id != canal_id:
         return
     embed_sugestao = discord.Embed()
     canal_destino = bot.get_channel(canal_id)
 
     #para sugestões anonimas
     if anonimo:
-        sessoes_pendentes.pop(usuario_id, None)
+        sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
         embed_sugestao.description = (f'__**UM USUÁRIO FEZ UMA SUGESTÃO!**__\n\n'
                                       f'**{sugestao}**')
         if canal_destino.guild.icon:
@@ -268,8 +260,15 @@ async def _limpar(ctx:commands.Context, quantidade:int = 10):
     await ctx.channel.purge(limit=quantidade + 1)
 
 #mensagem de ajuda para quem escreve "!s" no canal de sugestões
-async def mensagem_ajuda(msg):
-    mensagem_publicada = await msg.channel.send('''Comandos para uso ideal do Suggestion Bot!
+@bot.command()
+async def _ajuda(ctx:commands.Context):
+    canal_id = await procurar_canal(ctx=ctx)
+    if not canal_id:
+        return
+    if ctx.channel.id != canal_id:
+        return
+    canal_destino = bot.get_channel(canal_id)
+    mensagem_publicada = await canal_destino.send('''Comandos para uso ideal do Suggestion Bot!
 
 **!s_privado: Para uma sugestão anônima.** 
 O Suggestion Bot irá chama-lo no privado e te dar instruções para continuar!
@@ -280,7 +279,7 @@ Onde Suggestion Bot irá marca-lo como criador da sugestão!
 **!s_Limpar: Para limpar o canal de sugestões**
 (Permissão necessaria)''')
 
-    await msg.delete()
+    await ctx.message.delete()
     await asyncio.sleep(7)
     await mensagem_publicada.delete()
 
