@@ -152,7 +152,7 @@ async def _privado(ctx:commands.Context):
     if ctx.channel.id != canal_id:
         return
 
-    if canal_id != canal_sugestao:
+    if canal_id != ctx.channel.id:
         return
     sessoes_pendentes['chaves_sessoes'][ctx.author.id] = ctx
     await ctx.message.delete()
