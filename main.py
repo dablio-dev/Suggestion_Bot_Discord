@@ -1,4 +1,6 @@
 import asyncio
+import secrets
+
 import discord
 import json
 import os
@@ -13,14 +15,40 @@ bot = commands.Bot('!s', intents = intents)
 
 @bot.event
 async def on_command_error(ctx:commands.Context, error):
+    embed = discord.Embed()
     if isinstance(error, commands.CommandOnCooldown):
-        embed = discord.Embed()
-        embed.description = f'Vai com calma! Você esta tentando mandar comandos rapido de mais, espere {error.retry_after:.0f}s antes de tentar este mesmo comando de novo!'
+        embed.description = f'''**Vai com calma!**
+Você esta tentando mandar comandos rapido de mais, espere {error.retry_after:.0f}s antes de tentar este mesmo comando de novo!'''
+        mensagem = await ctx.send(embed=embed)
+        if ctx.guild:
+            await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
+
+    if isinstance(error, commands.MissingPermissions):
+        embed.description = 'Você não tem permissão para usar este comando entre em contato com um administrador!'
         mensagem = await ctx.send(embed=embed)
         await ctx.message.delete()
         await asyncio.sleep(7)
         await mensagem.delete()
-
+    if isinstance(error, commands.MissingRequiredArgument):
+        embed.description = 'Por favor adicione algum texto após o comando, este texto será sua sugestão'
+        mensagem = await ctx.send(embed=embed)
+        await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
+    if isinstance(error, commands.CommandInvokeError):
+        embed.description = 'Houve algum problema acionar o bot, por favor tente novamente!'
+        mensagem = await ctx.send(embed=embed)
+        await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
+    if isinstance(error, commands.BadArgument):
+        embed.description = 'Alguma informação depois do comando esta errada, por favor corrija e tente novamente!'
+        mensagem = await ctx.send(embed=embed)
+        await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
 @bot.event
 async def on_ready():
     botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
@@ -40,6 +68,8 @@ async def on_ready():
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def _escolher_canal(ctx:commands.Context):
+    if not ctx.guild:
+        return
     caminho = f'servidores/{ctx.guild.id}.json'
     os.makedirs('servidores', exist_ok=True)
     if not os.path.exists(caminho):
@@ -141,13 +171,23 @@ async def cb_botao(interacao:discord.Interaction):
 @bot.command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def _privado(ctx:commands.Context):
+    if not ctx.guild:
+        return
     canal_id = await procurar_canal(ctx=ctx)
     if not canal_id:
         return
     if ctx.channel.id != canal_id:
         return
+    if ctx.author.id in sessoes_pendentes['chaves_sessoes']:
+        embed = discord.Embed()
+        embed.description = '**Você já tem uma sessão ativa!** \nPor favor conclua ou aguarde ela ser encerrada!'
+        mensagem = await ctx.send(embed=embed)
+        await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
+        return
+    id_sessao = secrets.token_hex(3)
 
-    sessoes_pendentes['chaves_sessoes'][ctx.author.id] = ctx
     await ctx.message.delete()
     embed = discord.Embed()
     embed.description ='''**Tudo pronto para a sua sugestão anônima!**
@@ -156,12 +196,24 @@ async def _privado(ctx:commands.Context):
 2️⃣ Dê um espaço e escreva a sua sugestão logo na frente.
 3️⃣ Aperte Enter para enviar!
 ⏳ Nota: Esta sessão se fechará em 5 minutos. Caso não dê tempo, é só ir ''ao servidor e pedir outra.'''
-    await ctx.author.send(embed=embed)
-    asyncio.create_task(expirar_sessao(usuario_id = ctx.author.id))
+    try:
+        await ctx.author.send(embed=embed)
+        sessoes_pendentes['chaves_sessoes'][ctx.author.id] = {'ctx': ctx, 'id_sessao': id_sessao}
+        asyncio.create_task(expirar_sessao(ctx=ctx, id_sessao=id_sessao))
+    except discord.Forbidden or discord.Forbidden:
+        embed = discord.Embed()
+        embed.description = '**Por favor ative as mensagens privadas e tente novamente**'
+        mensagem = await ctx.send(embed=embed)
+        await ctx.message.delete()
+        await asyncio.sleep(7)
+        await mensagem.delete()
+        return
 
-async def expirar_sessao(usuario_id):
+async def expirar_sessao(ctx, id_sessao):
     await asyncio.sleep(300)
-    sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
+    if ctx.author.id in sessoes_pendentes['chaves_sessoes']:
+        if sessoes_pendentes['chaves_sessoes'][ctx.author.id]['id_sessao'] == id_sessao:
+            sessoes_pendentes['chaves_sessoes'].pop(ctx.author.id, None)
 
 #comando para fazer a sugestão anonima no privado
 @bot.command()
@@ -179,7 +231,7 @@ Isso acontece se o seu tempo de 5 minutos esgotou ou se você tentou iniciar o c
 3️⃣ Volte aqui nesta conversa e me envie a sua sugestão!'''
         await ctx.send(embed=embed)
         return
-    sugestao = str(sugestao_user).strip().capitalize()
+    sugestao = str(sugestao_user).strip()
     anonimo = True
     await disparar_embed(sugestao = sugestao, ctx = ctx, anonimo = anonimo, usuario_id = ctx.author.id)
 
@@ -187,12 +239,14 @@ Isso acontece se o seu tempo de 5 minutos esgotou ou se você tentou iniciar o c
 @bot.command()
 @commands.cooldown(1, 60, commands.BucketType.user)
 async def _sugerir(ctx:commands.Context,* ,sugestao_user):
+    if not ctx.guild:
+        return
     canal_id = await procurar_canal(ctx=ctx)
     if not canal_id:
         return
     if ctx.channel.id != canal_id:
         return
-    sugestao = str(sugestao_user).strip().capitalize()
+    sugestao = str(sugestao_user).strip()
     anonimo = False
 
     await disparar_embed(sugestao = sugestao, ctx = ctx, anonimo = anonimo, usuario_id = None)
@@ -223,10 +277,15 @@ um Administrador precisa ir ao canal desejado e digitar !s_escolher_canal.'''
 #função para disparar a embed
 async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
     if anonimo:
-        canal_id = await procurar_canal(ctx=sessoes_pendentes['chaves_sessoes'][ctx.author.id])
+        canal_id = await procurar_canal(ctx=sessoes_pendentes['chaves_sessoes'][ctx.author.id]['ctx'])
     else:
         canal_id = await procurar_canal(ctx=ctx)
     if not canal_id:
+        embed = discord.Embed()
+        embed.description = '''**Falta pouco para começarmos!**
+Nenhum canal de sugestões foi configurado por aqui ainda. Para que eu possa receber e publicar as ideias,
+um Administrador precisa ir ao canal desejado e digitar !s_escolher_canal.'''
+        await ctx.send(embed=embed)
         return
     embed_sugestao = discord.Embed()
     canal_destino = bot.get_channel(canal_id)
@@ -235,7 +294,6 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
     if anonimo:
         embed_sugestao.description = (f'__**UM USUÁRIO FEZ UMA SUGESTÃO!**__\n\n'
                                       f'**{sugestao}**')
-        sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
         if canal_destino.guild.icon:
             embed_sugestao.set_thumbnail(url=canal_destino.guild.icon.url)
         else:
@@ -251,9 +309,6 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
                                                                   '-Mudan-a-para-discord/blob/main/Perfil_Suggestion_Bot'
                                                                   '.jpg?raw=true', url = 'https://github.com/dablio-dev')
 
-    if anonimo:
-        await ctx.send(embed = embed_sugestao)
-
     botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
                                       custom_id='botao_sim')
     botao_reprovar = discord.ui.Button(label='Reprovar', style=discord.ButtonStyle.red, emoji='✖️',
@@ -266,6 +321,9 @@ async def disparar_embed(ctx, sugestao, anonimo, usuario_id):
     view.add_item(botao_reprovar)
 
     mensagem_publicada = await canal_destino.send(embed = embed_sugestao, view=view)
+    if anonimo:
+        await ctx.send(embed = embed_sugestao)
+        sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
 
 #comando para limpar o chat
 @bot.command()
