@@ -195,7 +195,7 @@ async def _privado(ctx:commands.Context):
 1️⃣ Digite !s_particular aqui neste chat.
 2️⃣ Dê um espaço e escreva a sua sugestão logo na frente.
 3️⃣ Aperte Enter para enviar!
-⏳ Nota: Esta sessão se fechará em 5 minutos. Caso não dê tempo, é só ir ''ao servidor e pedir outra.'''
+⏳ Nota: Esta sessão se fechará em 5 minutos. Caso não dê tempo, é só ir ao servidor e pedir outra.'''
     try:
         await ctx.author.send(embed=embed)
         sessoes_pendentes['chaves_sessoes'][ctx.author.id] = {'ctx': ctx, 'id_sessao': id_sessao}
