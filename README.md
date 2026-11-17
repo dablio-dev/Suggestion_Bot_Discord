@@ -1,14 +1,19 @@
 # Suggestion Bot Discord
 
-Bot para gerenciamento de sugestões em servidores Discord, desenvolvido em Python.
+Bot de sugestões para servidores Discord, desenvolvido em Python com `discord.py`.
 
-### Funcionalidades
-- Recebimento privado de sugestões.
-- Publicação automática em canal configurado.
-- Votação por reações (✅ e ❌).
-- Comando para limpeza de mensagens.
+Projeto pessoal e educativo, gratuito e em desenvolvimento.
 
-### Instalação
+## Funcionalidades
+
+- Sugestões públicas, com identificação do autor, ou anônimas, enviadas por mensagem privada.
+- Publicação automática no canal definido por um administrador.
+- Votação por botões de aprovação e reprovação, com opção de alterar ou remover o voto.
+- Armazenamento local das configurações e dos votos em arquivos JSON, separados por servidor.
+- Sessões para sugestões anônimas com duração de 5 minutos.
+- Cooldowns, verificação de permissões e comando de limpeza de mensagens.
+
+## Instalação
 
 Instale as dependências:
 
@@ -16,31 +21,37 @@ Instale as dependências:
 pip install discord.py python-dotenv
 ```
 
-Configure um arquivo `.env` na pasta do projeto:
+Crie um arquivo `.env` na pasta do projeto:
 
 ```env
 token_discord=SEU_TOKEN
-canal_sugestao=ID_DO_CANAL
 ```
 
-Execute o bot:
+No [Discord Developer Portal](https://discord.com/developers/applications), habilite **Message Content Intent** nas configurações do bot. Conceda as permissões de leitura e envio de mensagens, incorporação de links e gerenciamento de mensagens nos canais em que ele será utilizado.
+
+Inicie o bot:
 
 ```bash
 python main.py
 ```
 
-### Comandos
+Depois, no canal escolhido do servidor, um administrador deve executar `!s_escolher_canal`.
+
+## Comandos
 
 | Comando | Descrição |
 |---|---|
-| `!sugerir_privado` | Inicia o envio privado de uma sugestão. |
-| `!sugerir_particular <texto>` | Envia uma sugestão ao bot. |
-| `!sugerir_limparc <quantidade>` | Limpa mensagens do canal. |
+| `!s_escolher_canal` | Define o canal de sugestões (administradores). |
+| `!s_sugerir <texto>` | Publica uma sugestão com identificação do autor. |
+| `!s_privado` | Inicia uma sessão para enviar uma sugestão anônima por DM. |
+| `!s_particular <texto>` | Envia a sugestão anônima na conversa privada com o bot, após iniciar a sessão. |
+| `!s_ajuda` | Exibe os comandos no canal configurado. |
+| `!s_limpar <quantidade>` | Remove mensagens do canal (administradores; padrão: 10). |
 
-### Sobre o projeto
+**Observação:** os dados são armazenados na pasta `servidores/`. Em uma hospedagem, essa pasta precisa ter armazenamento persistente para manter as configurações e os votos após reinicializações.
 
-Projeto pessoal e educativo, desenvolvido como parte do meu aprendizado em Python. Sua construção tem sido uma oportunidade de colocar em prática o que venho estudando e aprender coisas novas durante o desenvolvimento.
+## Sobre o projeto
 
-O projeto ainda está em desenvolvimento e será disponibilizado gratuitamente, com código aberto.
+O Suggestion Bot é um projeto de aprendizado em Python, desenvolvido para colocar em prática conceitos de programação e integração com o Discord. O código está disponível publicamente e o projeto continua recebendo melhorias.
 
-**Desenvolvido por [dablio-dev](https://github.com/dablio-dev)**
+**Desenvolvido por [dablio-dev](https://github.com/dablio-dev).**
