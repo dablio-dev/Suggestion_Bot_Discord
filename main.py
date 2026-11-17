@@ -10,45 +10,37 @@ load_dotenv()
 token = os.getenv('token_discord')
 sessoes_pendentes = {'chaves_sessoes': {}}
 
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot('!s', intents = intents)
 
 @bot.event
 async def on_command_error(ctx:commands.Context, error):
+    erro_real = getattr(error, 'original', error)
+    print(f'erro no comando{ctx.command}: {type(erro_real).__name__}: {erro_real}')
     embed = discord.Embed()
     if isinstance(error, commands.CommandOnCooldown):
         embed.description = f'''**Vai com calma!**
 Você esta tentando mandar comandos rapido de mais, espere {error.retry_after:.0f}s antes de tentar este mesmo comando de novo!'''
-        mensagem = await ctx.send(embed=embed)
-        if ctx.guild:
-            await ctx.message.delete()
-        await asyncio.sleep(7)
-        await mensagem.delete()
-
-    if isinstance(error, commands.MissingPermissions):
+    elif isinstance(error, commands.MissingPermissions):
         embed.description = 'Você não tem permissão para usar este comando entre em contato com um administrador!'
-        mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
-        await asyncio.sleep(7)
-        await mensagem.delete()
-    if isinstance(error, commands.MissingRequiredArgument):
+    elif isinstance(error, commands.MissingRequiredArgument):
         embed.description = 'Por favor adicione algum texto após o comando, este texto será sua sugestão'
-        mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
-        await asyncio.sleep(7)
-        await mensagem.delete()
-    if isinstance(error, commands.CommandInvokeError):
+    elif isinstance(error, commands.CommandInvokeError):
         embed.description = 'Houve algum problema acionar o bot, por favor tente novamente!'
-        mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
-        await asyncio.sleep(7)
-        await mensagem.delete()
-    if isinstance(error, commands.BadArgument):
+    elif isinstance(error, commands.BadArgument):
         embed.description = 'Alguma informação depois do comando esta errada, por favor corrija e tente novamente!'
-        mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
-        await asyncio.sleep(7)
-        await mensagem.delete()
+    else:
+        return
+    mensagem = await ctx.send(embed=embed)
+    if ctx.guild:
+        try:
+            await ctx.message.delete()
+        except (discord.Forbidden, discord.NotFound):
+            pass
+    await asyncio.sleep(7)
+    await mensagem.delete()
+    return
 @bot.event
 async def on_ready():
     botao_aprovar = discord.ui.Button(label='Aprovar', style=discord.ButtonStyle.green, emoji='✅',
@@ -85,12 +77,17 @@ async def _escolher_canal(ctx:commands.Context):
     embed = discord.Embed()
     embed.description = 'Canal de sugestão definido com sucesso!'
     mensagem = await ctx.send(embed=embed)
-    await ctx.message.delete()
+    if ctx.guild:
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            pass
     await asyncio.sleep(7)
     await mensagem.delete()
 
 async def cb_botao(interacao:discord.Interaction):
     caminho = f'servidores/{interacao.guild.id}.json'
+    os.makedirs('servidores', exist_ok=True)
     if not os.path.exists(caminho):
         with open(caminho, 'w', encoding='utf-8') as f:
             json.dump({}, f, indent=4)
@@ -182,13 +179,16 @@ async def _privado(ctx:commands.Context):
         embed = discord.Embed()
         embed.description = '**Você já tem uma sessão ativa!** \nPor favor conclua ou aguarde ela ser encerrada!'
         mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
+        if ctx.guild:
+            try:
+                await ctx.message.delete()
+            except discord.Forbidden:
+                pass
         await asyncio.sleep(7)
         await mensagem.delete()
         return
     id_sessao = secrets.token_hex(3)
 
-    await ctx.message.delete()
     embed = discord.Embed()
     embed.description ='''**Tudo pronto para a sua sugestão anônima!**
 **Como enviar:**
@@ -200,11 +200,20 @@ async def _privado(ctx:commands.Context):
         await ctx.author.send(embed=embed)
         sessoes_pendentes['chaves_sessoes'][ctx.author.id] = {'ctx': ctx, 'id_sessao': id_sessao}
         asyncio.create_task(expirar_sessao(ctx=ctx, id_sessao=id_sessao))
-    except discord.Forbidden or discord.Forbidden:
+        if ctx.guild:
+            try:
+                await ctx.message.delete()
+            except discord.Forbidden:
+                pass
+    except discord.HTTPException:
         embed = discord.Embed()
         embed.description = '**Por favor ative as mensagens privadas e tente novamente**'
         mensagem = await ctx.send(embed=embed)
-        await ctx.message.delete()
+        if ctx.guild:
+            try:
+                await ctx.message.delete()
+            except discord.Forbidden:
+                pass
         await asyncio.sleep(7)
         await mensagem.delete()
         return
@@ -250,7 +259,11 @@ async def _sugerir(ctx:commands.Context,* ,sugestao_user):
     anonimo = False
 
     await disparar_embed(sugestao = sugestao, ctx = ctx, anonimo = anonimo, usuario_id = None)
-    await ctx.message.delete()
+    if ctx.guild:
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            pass
 
 async def procurar_canal(ctx):
     caminho = f'servidores/{ctx.guild.id}.json'
@@ -289,7 +302,13 @@ um Administrador precisa ir ao canal desejado e digitar !s_escolher_canal.'''
         return
     embed_sugestao = discord.Embed()
     canal_destino = bot.get_channel(canal_id)
-
+    if not canal_destino:
+        embed = discord.Embed()
+        embed.description = f'O canal configurado não foi encontrado. Peça a um administrador para usar `!s_escolher_canal` novamente.'
+        mensagem = await ctx.send(embed=embed)
+        await asyncio.sleep(7)
+        await mensagem.delete()
+        return
     #para sugestões anonimas
     if anonimo:
         embed_sugestao.description = (f'__**UM USUÁRIO FEZ UMA SUGESTÃO!**__\n\n'
@@ -322,8 +341,9 @@ um Administrador precisa ir ao canal desejado e digitar !s_escolher_canal.'''
 
     mensagem_publicada = await canal_destino.send(embed = embed_sugestao, view=view)
     if anonimo:
-        await ctx.send(embed = embed_sugestao)
-        sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
+        if mensagem_publicada:
+            sessoes_pendentes['chaves_sessoes'].pop(usuario_id, None)
+            await ctx.send(embed = embed_sugestao)
 
 #comando para limpar o chat
 @bot.command()
@@ -337,6 +357,9 @@ async def _limpar(ctx:commands.Context, quantidade:int = 10):
 @bot.command()
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def _ajuda(ctx:commands.Context):
+    if not ctx.guild:
+        return
+
     canal_id = await procurar_canal(ctx=ctx)
     if not canal_id:
         return
@@ -347,7 +370,7 @@ async def _ajuda(ctx:commands.Context):
     embed.description = '''**Central de Comandos - Suggestion Bot**
 
 !s_privado | Para uma sugestão anônima.
-O bot irá chamá-lo no privado para dar as instruções com total sigilo!
+O bot irá chamá-lo no privado para dar as instruções para sugestão anônima para os membros do servidor!
 
 !s_sugerir <sua ideia> | Para uma sugestão comum.
 Sua ideia será publicada e você será marcado como o autor da sugestão.
@@ -360,7 +383,11 @@ Avisa ao bot que ele deve operar neste canal (Apenas Administradores).'''
 
     mensagem_publicada = await canal_destino.send(embed=embed)
 
-    await ctx.message.delete()
+    if ctx.guild:
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            pass
     await asyncio.sleep(7)
     await mensagem_publicada.delete()
 
