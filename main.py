@@ -1,6 +1,6 @@
 import asyncio
 import secrets
-
+import sqlite3
 import discord
 import json
 import os

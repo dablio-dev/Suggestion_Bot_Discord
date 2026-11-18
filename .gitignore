@@ -18,6 +18,8 @@ servidores/
 venv/
 ENV/
 env/
+.md
+*.md
 
 # ==========================================
 # 3. CACHE E ARQUIVOS TEMPORÁRIOS DO PYTHON
