@@ -20,7 +20,7 @@ ENV/
 env/
 .md
 *.md
-
+/Microsoft/
 # ==========================================
 # 3. CACHE E ARQUIVOS TEMPORÁRIOS DO PYTHON
 # ==========================================
